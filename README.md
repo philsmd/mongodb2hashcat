@@ -28,6 +28,9 @@ You can also instruct the script to only export a certain type of hash:
   `mongo admin --eval 'var scramSHA256 = 0' mongodb2hashcat.js`  
   `mongo admin --eval 'var scramSHA1   = 0' mongodb2hashcat.js`
 
+You can also instruct the script to load the hashes from a JSON dump file:  
+  `mongo admin --eval 'var dumpFile = "users.json"' mongodb2hashcat.js`
+
 You can redirect the output like this:  
   `mongo admin --eval 'var scramSHA256 = 0' mongodb2hashcat.js > m24100_hashes.txt`  
   `mongo admin --eval 'var scramSHA1   = 0' mongodb2hashcat.js > m24200_hashes.txt`

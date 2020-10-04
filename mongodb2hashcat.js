@@ -96,16 +96,72 @@ if (typeof scramSHA256 != "undefined")
   }
 }
 
+var altCursor = undefined;
+
+if (typeof dumpFile != "undefined")
+{
+  try
+  {
+    var fileContent = cat (dumpFile);
+
+    // work around a JSON.parse () error with 'UUID ("id")':
+
+    fileContent = fileContent.replace (new RegExp ('UUID\\(', 'g'), "");
+    fileContent = fileContent.replace (new RegExp ('\\),',    'g'), ",");
+
+    // we need to create a fake array (multiple {} objects separated by ",")
+    // if we have more than one (1) single user:
+
+    fileContent = "[" + fileContent + "]";
+
+    fileContent = fileContent.replace (new RegExp ('}[\r\n]\+{',   'g'), "},\n{");
+
+    altCursor = JSON.parse (fileContent);
+  }
+  catch (err)
+  {
+    print (err);
+
+    quit ();
+  }
+}
+
 try
 {
-
   if (outputSHA1hashes == 1)
   {
-    var cursor = db.system.users.find ();
+    var count   = 0;
+    var hasNext = true;
+    var cursor  = undefined;
 
-    while (cursor.hasNext ())
+    if (typeof altCursor == "undefined")
     {
-      var c = cursor.next ();
+      cursor = db.system.users.find ();
+    }
+
+    while (hasNext)
+    {
+      if (typeof altCursor == "undefined")
+      {
+        hasNext = cursor.hasNext ();
+      }
+      else
+      {
+        hasNext = (altCursor.length > count);
+      }
+
+      if (hasNext == false) break;
+
+      var c = undefined;
+
+      if (typeof altCursor == "undefined")
+      {
+        c = cursor.next ();
+      }
+      else
+      {
+        c = altCursor[count];
+      }
 
       var s = c['credentials']['SCRAM-SHA-1'];
 
@@ -116,18 +172,50 @@ try
       var h = '$mongodb-scram$*0*' + u + '*' + s['iterationCount'] + '*' + s['salt'] + '*' + s['serverKey'];
 
       print (h);
+
+      count++;
     }
 
-    cursor.close ();
+    if (typeof altCursor == "undefined")
+    {
+      cursor.close ();
+    }
   }
 
   if (outputSHA256hashes == 1)
   {
-    var cursor = db.system.users.find ();
+    var count   = 0;
+    var hasNext = true;
+    var cursor  = undefined;
 
-    while (cursor.hasNext ())
+    if (typeof altCursor == "undefined")
     {
-      var c = cursor.next ();
+      cursor = db.system.users.find ();
+    }
+
+    while (hasNext)
+    {
+      if (typeof altCursor == "undefined")
+      {
+        hasNext = cursor.hasNext ();
+      }
+      else
+      {
+        hasNext = (altCursor.length > count);
+      }
+
+      if (hasNext == false) break;
+
+      var c = undefined;
+
+      if (typeof altCursor == "undefined")
+      {
+        c = cursor.next ();
+      }
+      else
+      {
+        c = altCursor[count];
+      }
 
       var s = c['credentials']['SCRAM-SHA-256'];
 
@@ -138,9 +226,14 @@ try
       var h = '$mongodb-scram$*1*' + u + '*' + s['iterationCount'] + '*' + s['salt'] + '*' + s['serverKey'];
 
       print (h);
+
+      count++;
     }
 
-    cursor.close ();
+    if (typeof altCursor == "undefined")
+    {
+      cursor.close ();
+    }
   }
 }
 catch (err) {}
