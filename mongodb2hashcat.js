@@ -32,6 +32,51 @@
 
 // e.g. mongo admin --eval 'var scramSHA256 = 0' mongodb2hashcat.js
 
+/*
+ * Helper functions:
+ */
+
+function base64Encode (input)
+{
+  var BASE64_TABLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+
+  var output = "";
+
+  for (var i = 0; i < input.length; i += 3)
+  {
+    var c0 = input.charCodeAt (i + 0);
+    var c1 = input.charCodeAt (i + 1);
+    var c2 = input.charCodeAt (i + 2);
+
+    var f = c0 >> 2;
+
+    var a = (c0 &  3) << 4 | c1 >> 4;
+    var b = (c1 & 15) << 2 | c2 >> 6;
+    var c = (c2 & 63);
+
+    if (isNaN (c1))
+    {
+      b = 64; // =
+      c = 64; // =
+    }
+    else if (isNaN (c2))
+    {
+      c = 64; // =
+    }
+
+    output += BASE64_TABLE.charAt (f)
+           +  BASE64_TABLE.charAt (a)
+           +  BASE64_TABLE.charAt (b)
+           +  BASE64_TABLE.charAt (c);
+  }
+
+  return output;
+}
+
+/*
+ * Start
+ */
+
 var outputSHA1hashes   = 1;
 var outputSHA256hashes = 1;
 
@@ -56,17 +101,19 @@ try
 
   if (outputSHA1hashes == 1)
   {
-    cursor = db.system.users.find ();
+    var cursor = db.system.users.find ();
 
     while (cursor.hasNext ())
     {
-      c = cursor.next ();
+      var c = cursor.next ();
 
-      s = c['credentials']['SCRAM-SHA-1'];
+      var s = c['credentials']['SCRAM-SHA-1'];
 
       if (!s) continue;
 
-      h = '$mongodb-scram$*0*' + c['user'] + '*' + s['iterationCount'] + '*' + s['salt'] + '*' + s['serverKey'];
+      var u = base64Encode (c['user']);
+
+      var h = '$mongodb-scram$*0*' + u + '*' + s['iterationCount'] + '*' + s['salt'] + '*' + s['serverKey'];
 
       print (h);
     }
@@ -76,17 +123,19 @@ try
 
   if (outputSHA256hashes == 1)
   {
-    cursor = db.system.users.find ();
+    var cursor = db.system.users.find ();
 
     while (cursor.hasNext ())
     {
-      c = cursor.next ();
+      var c = cursor.next ();
 
-      s = c['credentials']['SCRAM-SHA-256'];
+      var s = c['credentials']['SCRAM-SHA-256'];
 
       if (!s) continue;
 
-      h = '$mongodb-scram$*1*' + c['user'] + '*' + s['iterationCount'] + '*' + s['salt'] + '*' + s['serverKey'];
+      var u = base64Encode (c['user']);
+
+      var h = '$mongodb-scram$*1*' + u + '*' + s['iterationCount'] + '*' + s['salt'] + '*' + s['serverKey'];
 
       print (h);
     }

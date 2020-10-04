@@ -35,10 +35,10 @@ You can redirect the output like this:
 # Explanation of the hash format
 
 If the hashes are using SCRAM-SHA-1:  
- `$mongodb-scram$*0*user_name*iter*base64_salt*base64_digest`
+ `$mongodb-scram$*0*base64_user*iter*base64_salt*base64_digest`
 
 SCRAM-SHA-256 hashes:  
- `$mongodb-scram$*1*user_name*iter*base64_salt*base64_digest`
+ `$mongodb-scram$*1*base64_user*iter*base64_salt*base64_digest`
 
 # Hacking / Missing features
 
