@@ -34,7 +34,7 @@ You can redirect the output like this:
 
 # Explanation of the hash format
 
-if the backup was generated with SCRAM-SHA-1:  
+If the hashes are using SCRAM-SHA-1:  
  `$mongodb-scram$*0*user_name*iter*base64_salt*base64_digest`
 
 SCRAM-SHA-256 hashes:  
