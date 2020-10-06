@@ -13,8 +13,8 @@
  * changes to support the SCRAM-SHA-256 variant by philsmd
  */
 
-// Usage: mongo admin mongodb2john.js
-//        mongo [hostname]:[port]/[database_name] mongodb2john.js
+// Usage: mongo admin mongodb2hashcat.js
+//        mongo [hostname]:[port]/[database_name] mongodb2hashcat.js
 
 // how to create a test database and user:
 // $ mongo
@@ -22,7 +22,7 @@
 // db.createUser ({user: "user", pwd: "hashcat", roles: ["readWrite","dbAdmin"]})
 
 // extract the hash with this script like this:
-// $ mongo admin mongodb2hashcat.js
+// $ mongo --quiet admin mongodb2hashcat.js
 
 // use this to disable SCRAM-SHA1 hash output:
 // --eval 'var scramSHA1 = 0'
@@ -30,7 +30,14 @@
 // use this to disable SCRAM-SHA256 hash output:
 // --eval 'var scramSHA256 = 0'
 
-// e.g. mongo admin --eval 'var scramSHA256 = 0' mongodb2hashcat.js
+// use this to load the data from a JSON dump file:
+// --eval 'var dumpFile = "users.json"'
+
+// e.g. something like this:
+// $ mongo --quiet --eval 'var scramSHA256 = 0' admin mongodb2hashcat.js
+
+// to combine multiple parameters use a semicolon:
+// $ mongo --quiet --eval 'var scramSHA1 = 0; var dumpFile = "a.json"' admin mongodb2hashcat.js
 
 /*
  * Helper functions:
@@ -77,14 +84,14 @@ function base64Encode (input)
  * Start
  */
 
-var outputSHA1hashes   = 1;
-var outputSHA256hashes = 1;
+var outputSHA1hashes   = true;
+var outputSHA256hashes = true;
 
 if (typeof scramSHA1 != "undefined")
 {
   if (scramSHA1 == 0)
   {
-    outputSHA1hashes = 0;
+    outputSHA1hashes = false;
   }
 }
 
@@ -92,9 +99,20 @@ if (typeof scramSHA256 != "undefined")
 {
   if (scramSHA256 == 0)
   {
-    outputSHA256hashes = 0;
+    outputSHA256hashes = false;
   }
 }
+
+var hashTypes = [
+  {
+    name:    "SCRAM-SHA-1",
+    enabled: outputSHA1hashes
+  },
+  {
+    name:    "SCRAM-SHA-256",
+    enabled: outputSHA256hashes
+  }
+]
 
 var altCursor = undefined;
 
@@ -128,8 +146,15 @@ if (typeof dumpFile != "undefined")
 
 try
 {
-  if (outputSHA1hashes == 1)
+  // print them in order: first SHA1-based hashes, then SHA256-based hashes
+
+  for (var i = 0; i < hashTypes.length; i++)
   {
+    var hashTypeAlgoName = hashTypes[i].name;
+    var hashTypeEnabled  = hashTypes[i].enabled;
+
+    if (! hashTypeEnabled) continue;
+
     var count   = 0;
     var hasNext = true;
     var cursor  = undefined;
@@ -160,74 +185,40 @@ try
       }
       else
       {
-        c = altCursor[count];
+        c = altCursor[count++];
       }
 
-      var s = c['credentials']['SCRAM-SHA-1'];
+      if (! c) break;
 
-      if (!s) continue;
+      var t = c['credentials'];
 
-      var u = base64Encode (c['user']);
+      if (! t) continue;
 
-      var h = '$mongodb-scram$*0*' + u + '*' + s['iterationCount'] + '*' + s['salt'] + '*' + s['serverKey'];
+      var s = t[hashTypeAlgoName];
 
-      print (h);
+      if (! s) continue;
 
-      count++;
-    }
+      var user = c['user'];
+      var iter = s['iterationCount'];
+      var salt = s['salt'];
+      var sKey = s['serverKey'];
 
-    if (typeof altCursor == "undefined")
-    {
-      cursor.close ();
-    }
-  }
+      if (! user) continue;
 
-  if (outputSHA256hashes == 1)
-  {
-    var count   = 0;
-    var hasNext = true;
-    var cursor  = undefined;
+      user = base64Encode (user);
 
-    if (typeof altCursor == "undefined")
-    {
-      cursor = db.system.users.find ();
-    }
+      if (! iter) continue;
+      if (! salt) continue;
+      if (! sKey) continue;
 
-    while (hasNext)
-    {
-      if (typeof altCursor == "undefined")
-      {
-        hasNext = cursor.hasNext ();
-      }
-      else
-      {
-        hasNext = (altCursor.length > count);
-      }
+      var hash = '$mongodb-scram$' + '*' +
+                                 i + '*' +
+                              user + '*' +
+                              iter + '*' +
+                              salt + '*' +
+                              sKey;
 
-      if (hasNext == false) break;
-
-      var c = undefined;
-
-      if (typeof altCursor == "undefined")
-      {
-        c = cursor.next ();
-      }
-      else
-      {
-        c = altCursor[count];
-      }
-
-      var s = c['credentials']['SCRAM-SHA-256'];
-
-      if (!s) continue;
-
-      var u = base64Encode (c['user']);
-
-      var h = '$mongodb-scram$*1*' + u + '*' + s['iterationCount'] + '*' + s['salt'] + '*' + s['serverKey'];
-
-      print (h);
-
-      count++;
+      print (hash);
     }
 
     if (typeof altCursor == "undefined")
