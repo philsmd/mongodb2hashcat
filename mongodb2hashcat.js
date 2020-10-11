@@ -33,6 +33,9 @@
 // use this to load the data from a JSON dump file:
 // --eval 'var dumpFile = "users.json"'
 
+// use this to prepend the user id record to each hash:
+// --eval 'var withID = 1'
+
 // e.g. something like this:
 // $ mongo --quiet --eval 'var scramSHA256 = 0' admin mongodb2hashcat.js
 
@@ -45,9 +48,9 @@
 
 function base64Encode (input)
 {
-  var BASE64_TABLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+  var BASE64_TABLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
 
-  var output = "";
+  var output = '';
 
   for (var i = 0; i < input.length; i += 3)
   {
@@ -55,68 +58,97 @@ function base64Encode (input)
     var c1 = input.charCodeAt (i + 1);
     var c2 = input.charCodeAt (i + 2);
 
-    var f = c0 >> 2;
+    var a =                  c0 >> 2;
+    var b = (c0 &  3) << 4 | c1 >> 4;
+    var c = (c1 & 15) << 2 | c2 >> 6;
+    var d = (c2 & 63);
 
-    var a = (c0 &  3) << 4 | c1 >> 4;
-    var b = (c1 & 15) << 2 | c2 >> 6;
-    var c = (c2 & 63);
-
-    if (isNaN (c1))
-    {
-      b = 64; // =
-      c = 64; // =
-    }
-    else if (isNaN (c2))
+    if (! c1) // or isNaN ()
     {
       c = 64; // =
+      d = 64; // =
+    }
+    else if (! c2) // or isNaN ()
+    {
+      d = 64; // =
     }
 
-    output += BASE64_TABLE.charAt (f)
-           +  BASE64_TABLE.charAt (a)
+    output += BASE64_TABLE.charAt (a)
            +  BASE64_TABLE.charAt (b)
-           +  BASE64_TABLE.charAt (c);
+           +  BASE64_TABLE.charAt (c)
+           +  BASE64_TABLE.charAt (d);
   }
 
   return output;
+}
+
+class Cursor
+{
+  constructor (str)
+  {
+    this.items = JSON.parse (str);
+    this.size  = this.items.length;
+    this.index = 0;
+  }
+
+  hasNext ()
+  {
+    return this.size > this.index;
+  }
+
+  isExhausted ()
+  {
+    return false; // never the case
+  }
+
+  next ()
+  {
+    return this.items[this.index++];
+  }
+
+  close ()
+  {
+    this.index = 0; // reset
+  }
 }
 
 /*
  * Start
  */
 
+var outputID           = false;
 var outputSHA1hashes   = true;
 var outputSHA256hashes = true;
 
-if (typeof scramSHA1 != "undefined")
+if (typeof withID != 'undefined')
 {
-  if (scramSHA1 == 0)
-  {
-    outputSHA1hashes = false;
-  }
+  if (withID) outputID = true;
 }
 
-if (typeof scramSHA256 != "undefined")
+if (typeof scramSHA1 != 'undefined')
 {
-  if (scramSHA256 == 0)
-  {
-    outputSHA256hashes = false;
-  }
+  if (! scramSHA1) outputSHA1hashes = false;
+}
+
+if (typeof scramSHA256 != 'undefined')
+{
+  if (! scramSHA256) outputSHA256hashes = false;
 }
 
 var hashTypes = [
   {
-    name:    "SCRAM-SHA-1",
+    name:    'SCRAM-SHA-1',
     enabled: outputSHA1hashes
   },
   {
-    name:    "SCRAM-SHA-256",
+    name:    'SCRAM-SHA-256',
     enabled: outputSHA256hashes
   }
 ]
 
-var altCursor = undefined;
+var cursor = undefined;
 
-if (typeof dumpFile != "undefined")
+if (typeof dumpFile != 'undefined')
 {
   try
   {
@@ -124,17 +156,17 @@ if (typeof dumpFile != "undefined")
 
     // work around a JSON.parse () error with 'UUID ("id")':
 
-    fileContent = fileContent.replace (new RegExp ('UUID\\(', 'g'), "");
-    fileContent = fileContent.replace (new RegExp ('\\),',    'g'), ",");
+    fileContent = fileContent.replace (new RegExp ('UUID\\(', 'g'), '');
+    fileContent = fileContent.replace (new RegExp ('\\),',    'g'), ',');
 
     // we need to create a fake array (multiple {} objects separated by ",")
     // if we have more than one (1) single user:
 
-    fileContent = "[" + fileContent + "]";
+    fileContent = '[' + fileContent + ']';
 
-    fileContent = fileContent.replace (new RegExp ('}[\r\n]\+{',   'g'), "},\n{");
+    fileContent = fileContent.replace (new RegExp ('}[\r\n]\+{', 'g'), '},\n{');
 
-    altCursor = JSON.parse (fileContent);
+    cursor = new Cursor (fileContent);
   }
   catch (err)
   {
@@ -146,7 +178,11 @@ if (typeof dumpFile != "undefined")
 
 try
 {
-  // print them in order: first SHA1-based hashes, then SHA256-based hashes
+  // print the user hashes in order:
+  // - first SHA1-based hashes,
+  // - then SHA256-based hashes
+
+  if (! cursor) cursor = db.system.users.find (); // query the database
 
   for (var i = 0; i < hashTypes.length; i++)
   {
@@ -155,38 +191,11 @@ try
 
     if (! hashTypeEnabled) continue;
 
-    var count   = 0;
-    var hasNext = true;
-    var cursor  = undefined;
+    if (cursor.isExhausted ()) cursor = db.system.users.find ();
 
-    if (typeof altCursor == "undefined")
+    while (cursor.hasNext ())
     {
-      cursor = db.system.users.find ();
-    }
-
-    while (hasNext)
-    {
-      if (typeof altCursor == "undefined")
-      {
-        hasNext = cursor.hasNext ();
-      }
-      else
-      {
-        hasNext = (altCursor.length > count);
-      }
-
-      if (hasNext == false) break;
-
-      var c = undefined;
-
-      if (typeof altCursor == "undefined")
-      {
-        c = cursor.next ();
-      }
-      else
-      {
-        c = altCursor[count++];
-      }
+      var c = cursor.next ();
 
       if (! c) break;
 
@@ -211,6 +220,17 @@ try
       if (! salt) continue;
       if (! sKey) continue;
 
+      var idField = '';
+
+      if (outputID)
+      {
+        var userID = c['_id'];
+
+        if (userID) idField = userID;
+
+        idField += ':';
+      }
+
       var hash = '$mongodb-scram$' + '*' +
                                  i + '*' +
                               user + '*' +
@@ -218,13 +238,10 @@ try
                               salt + '*' +
                               sKey;
 
-      print (hash);
+      print (idField + hash);
     }
 
-    if (typeof altCursor == "undefined")
-    {
-      cursor.close ();
-    }
+    cursor.close ();
   }
 }
 catch (err) {}
