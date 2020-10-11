@@ -35,7 +35,7 @@ You can also instruct the script to load the hashes from a JSON dump file:
 
 Note: the `admin` parameter in this particular command isn't really required, because in this special case there is no need to query the admin database (the whole data is assumed to be present in the `JSON` file).
 
-You can also instruct the script to prepend the `_id` of the user to the hash line:  
+You can also instruct the script to prepend the `_id` of the user/database/table to the hash line:  
   `mongo --quiet --eval 'var withID = 1' admin mongodb2hashcat.js`
 
 Note: if you use `withID = 1` you need to use the `--username` parameter for hashcat to load hashes with user names while cracking and show the user names when using `--show`.
